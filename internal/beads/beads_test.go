@@ -214,6 +214,101 @@ func TestSuppressBDSideEffectsOverridesInherited(t *testing.T) {
 	}
 }
 
+func TestBuildReadOnlyBDEnvForcesReadOnly(t *testing.T) {
+	beadsDir := filepath.Join(t.TempDir(), ".beads")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(beadsDir, "metadata.json"), []byte(`{"dolt_database":"hq","dolt_server_host":"127.0.0.1","dolt_server_port":3307}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	env := BuildReadOnlyRoutingBDEnv([]string{
+		"PATH=/usr/bin",
+		"BD_DOLT_AUTO_COMMIT=on",
+		"BD_READONLY=false",
+		"BEADS_DOLT_SERVER_DATABASE=wrong",
+	}, beadsDir)
+	got := envMap(env)
+
+	if got["BD_DOLT_AUTO_COMMIT"] != "off" {
+		t.Fatalf("BD_DOLT_AUTO_COMMIT = %q, want off in %v", got["BD_DOLT_AUTO_COMMIT"], env)
+	}
+	if got["BD_READONLY"] != "true" {
+		t.Fatalf("BD_READONLY = %q, want true in %v", got["BD_READONLY"], env)
+	}
+	if _, ok := got["BEADS_DOLT_SERVER_DATABASE"]; ok {
+		t.Fatalf("routing read-only env should not pin database: %v", env)
+	}
+}
+
+func TestBuildMutationBDEnvForcesWritableCommit(t *testing.T) {
+	beadsDir := filepath.Join(t.TempDir(), ".beads")
+	if err := os.MkdirAll(beadsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(beadsDir, "metadata.json"), []byte(`{"dolt_database":"hq","dolt_server_host":"127.0.0.1","dolt_server_port":3307}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	env := BuildMutationPinnedBDEnv([]string{
+		"PATH=/usr/bin",
+		"BD_DOLT_AUTO_COMMIT=off",
+		"BD_READONLY=true",
+		"BEADS_DIR=/wrong",
+	}, beadsDir)
+	got := envMap(env)
+
+	if got["BEADS_DIR"] != beadsDir {
+		t.Fatalf("BEADS_DIR = %q, want %q in %v", got["BEADS_DIR"], beadsDir, env)
+	}
+	if got["BD_DOLT_AUTO_COMMIT"] != "on" {
+		t.Fatalf("BD_DOLT_AUTO_COMMIT = %q, want on in %v", got["BD_DOLT_AUTO_COMMIT"], env)
+	}
+	if _, ok := got["BD_READONLY"]; ok {
+		t.Fatalf("BD_READONLY should be absent for mutation env, got %q in %v", got["BD_READONLY"], env)
+	}
+}
+
+func TestArgsAreReadOnlyClassifiesKnownReadCommands(t *testing.T) {
+	cases := [][]string{
+		{"show", "gt-123", "--json"},
+		{"--allow-stale", "show", "gt-123", "--json"},
+		{"query", "merge-request", "--json"},
+		{"dep", "list", "hq-cv-123", "--json"},
+		{"mol", "wisp", "list", "--json"},
+		{"sql", "SELECT 1"},
+		{"sql", "--csv", "SELECT 1"},
+		{"config", "get", "issue_prefix"},
+	}
+	for _, args := range cases {
+		if !ArgsAreReadOnly(args) {
+			t.Fatalf("ArgsAreReadOnly(%v) = false, want true", args)
+		}
+		if got := SubprocessModeForArgs(args); got != ReadOnlyRouting {
+			t.Fatalf("SubprocessModeForArgs(%v) = %v, want ReadOnlyRouting", args, got)
+		}
+	}
+}
+
+func TestArgsAreReadOnlyFailsClosedForMutations(t *testing.T) {
+	cases := [][]string{
+		{"update", "gt-123", "--status=open"},
+		{"close", "gt-123"},
+		{"mol", "wisp", "formula"},
+		{"sql", "UPDATE issues SET status='open'"},
+		{"config", "set", "issue_prefix", "gt"},
+	}
+	for _, args := range cases {
+		if ArgsAreReadOnly(args) {
+			t.Fatalf("ArgsAreReadOnly(%v) = true, want false", args)
+		}
+		if got := SubprocessModeForArgs(args); got != MutationRouting {
+			t.Fatalf("SubprocessModeForArgs(%v) = %v, want MutationRouting", args, got)
+		}
+	}
+}
+
 func envMap(env []string) map[string]string {
 	out := make(map[string]string)
 	for _, entry := range env {

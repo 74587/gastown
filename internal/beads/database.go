@@ -83,6 +83,69 @@ func BuildRoutingBDEnv(base []string, fallbackBeadsDir string) []string {
 	return addGTDerivedDoltTargetEnv(env)
 }
 
+// BuildReadOnlyPinnedBDEnv returns env for a read-only bd subprocess pinned to
+// beadsDir. It strips any inherited write/read mode before forcing read-only.
+func BuildReadOnlyPinnedBDEnv(base []string, beadsDir string) []string {
+	return forceBDReadOnly(BuildPinnedBDEnv(base, beadsDir))
+}
+
+// BuildReadOnlyRoutingBDEnv returns env for a read-only bd subprocess that uses
+// bd prefix routing instead of pinning BEADS_DIR.
+func BuildReadOnlyRoutingBDEnv(base []string, fallbackBeadsDir string) []string {
+	return forceBDReadOnly(BuildRoutingBDEnv(base, fallbackBeadsDir))
+}
+
+// BuildMutationPinnedBDEnv returns env for a mutating bd subprocess pinned to
+// beadsDir. It removes inherited read-only/auto-commit mode and forces commit-on
+// so writes do not get stranded in a daemon or status-line subprocess context.
+func BuildMutationPinnedBDEnv(base []string, beadsDir string) []string {
+	return forceBDMutation(BuildPinnedBDEnv(base, beadsDir))
+}
+
+// BuildMutationRoutingBDEnv returns env for a mutating bd subprocess that uses
+// bd prefix routing instead of pinning BEADS_DIR.
+func BuildMutationRoutingBDEnv(base []string, fallbackBeadsDir string) []string {
+	return forceBDMutation(BuildRoutingBDEnv(base, fallbackBeadsDir))
+}
+
+// ArgsAreReadOnly classifies bd CLI arguments for env policy. Unknown commands
+// are treated as mutations so they cannot accidentally inherit read-only mode.
+func ArgsAreReadOnly(args []string) bool {
+	args = stripBDGlobalFlags(args)
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "show", "list", "ready", "blocked", "stats", "stale", "orphans", "activity", "query", "version":
+		return true
+	case "dep":
+		return len(args) > 1 && args[1] == "list"
+	case "mol":
+		return len(args) > 2 && args[1] == "wisp" && args[2] == "list"
+	case "sql":
+		query := strings.ToLower(strings.Join(stripBDCommandFlags(args[1:]), " "))
+		return strings.HasPrefix(strings.TrimSpace(query), "select")
+	case "config":
+		return len(args) > 1 && args[1] == "get"
+	default:
+		return false
+	}
+}
+
+func stripBDGlobalFlags(args []string) []string {
+	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		args = args[1:]
+	}
+	return args
+}
+
+func stripBDCommandFlags(args []string) []string {
+	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		args = args[1:]
+	}
+	return args
+}
+
 // SuppressBDSideEffects disables Beads JSONL export/backup/push side effects for
 // Gas Town-managed subprocesses. The authoritative data plane is Dolt; exporting
 // JSONL from high-frequency gt callers re-invalidates Beads' import freshness
@@ -106,6 +169,18 @@ func SuppressBDSideEffects(env []string) []string {
 		"BD_EXPORT_GIT_ADD=false",
 		"BD_NO_GIT_OPS=true",
 	)
+}
+
+func forceBDReadOnly(env []string) []string {
+	env = stripEnvKey(env, "BD_DOLT_AUTO_COMMIT")
+	env = stripEnvKey(env, "BD_READONLY")
+	return append(env, "BD_DOLT_AUTO_COMMIT=off", "BD_READONLY=true")
+}
+
+func forceBDMutation(env []string) []string {
+	env = stripEnvKey(env, "BD_DOLT_AUTO_COMMIT")
+	env = stripEnvKey(env, "BD_READONLY")
+	return append(env, "BD_DOLT_AUTO_COMMIT=on")
 }
 
 func doltTargetEnvFromBeadsDir(beadsDir string, includeDatabase bool) []string {

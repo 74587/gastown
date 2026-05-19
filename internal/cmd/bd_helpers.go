@@ -136,6 +136,7 @@ func (b *bdCmd) buildEnv() []string {
 	// so an existing "off" entry would shadow the appended "on".
 	if b.autoCommit {
 		env = filterEnvKey(env, "BD_DOLT_AUTO_COMMIT")
+		env = filterEnvKey(env, "BD_READONLY")
 		env = append(env, "BD_DOLT_AUTO_COMMIT=on")
 	}
 

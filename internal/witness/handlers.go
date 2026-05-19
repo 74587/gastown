@@ -1,6 +1,7 @@
 package witness
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,13 +71,45 @@ func DefaultBdCli() *BdCli {
 		Exec: func(workDir string, args ...string) (string, error) {
 			// bd v0.59+ requires --flat for list --json to produce JSON
 			args = beads.InjectFlatForListJSON(args)
-			return util.ExecWithOutput(workDir, "bd", args...)
+			return defaultBDExecWithOutput(workDir, args...)
 		},
 		Run: func(workDir string, args ...string) error {
 			args = beads.InjectFlatForListJSON(args)
-			return util.ExecRun(workDir, "bd", args...)
+			return defaultBDRun(workDir, args...)
 		},
 	}
+}
+
+func defaultBDExecWithOutput(workDir string, args ...string) (string, error) {
+	cmd := beads.Command(workDir, beads.ResolveBeadsDir(workDir), beads.SubprocessModeForArgs(args), args...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return "", fmt.Errorf("%s", errMsg)
+		}
+		return "", err
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+func defaultBDRun(workDir string, args ...string) error {
+	cmd := beads.Command(workDir, beads.ResolveBeadsDir(workDir), beads.SubprocessModeForArgs(args), args...)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return fmt.Errorf("%s", errMsg)
+		}
+		return err
+	}
+	return nil
 }
 
 // initRegistryFromTownRoot initializes registries from a known town root,

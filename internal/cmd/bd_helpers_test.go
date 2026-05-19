@@ -258,7 +258,7 @@ func TestBdCmd_WithAutoCommit_OverridesParentOff(t *testing.T) {
 	// before appending BD_DOLT_AUTO_COMMIT=on. This is critical because
 	// glibc getenv() returns the first match in the env array, so a duplicate
 	// "off" entry would shadow the appended "on".
-	baseEnv := []string{"PATH=/usr/bin", "BD_DOLT_AUTO_COMMIT=off", "HOME=/home/user"}
+	baseEnv := []string{"PATH=/usr/bin", "BD_DOLT_AUTO_COMMIT=off", "BD_READONLY=true", "HOME=/home/user"}
 
 	bdc := &bdCmd{
 		args:   []string{"show", "id"},
@@ -283,6 +283,9 @@ func TestBdCmd_WithAutoCommit_OverridesParentOff(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("found %d BD_DOLT_AUTO_COMMIT entries, want exactly 1 (dedup must remove old entry)", count)
+	}
+	if _, ok := envMap["BD_READONLY"]; ok {
+		t.Errorf("BD_READONLY should be stripped for WithAutoCommit mutation env, got %q", envMap["BD_READONLY"])
 	}
 }
 

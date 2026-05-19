@@ -2780,7 +2780,7 @@ func (d *Daemon) hasAssignedOpenWork(rigName, assignee string) bool {
 	rigDir := beads.GetRigDirForName(d.config.TownRoot, rigName)
 
 	for _, status := range []string{"hooked", "in_progress", "open"} {
-		args := []string{"list", "--assignee=" + assignee, "--status=" + status, "--json"}
+		args := beads.InjectFlatForListJSON([]string{"list", "--assignee=" + assignee, "--status=" + status, "--json"})
 		if rigDir != "" {
 			args = append(args, "--repo="+rigDir)
 		}

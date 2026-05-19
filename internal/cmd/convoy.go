@@ -2106,6 +2106,7 @@ func listConvoyIssues(townBeads, status string, all bool, extraLabels ...string)
 		args = append(args, "--all")
 	}
 
+	args = beads.InjectFlatForListJSON(args)
 	convoys, err := readConvoyIssues(townBeads, args...)
 	if err != nil {
 		return nil, err
@@ -2121,6 +2122,7 @@ func listConvoyIssues(townBeads, status string, all bool, extraLabels ...string)
 	} else if all {
 		legacyArgs = append(legacyArgs, "--all")
 	}
+	legacyArgs = beads.InjectFlatForListJSON(legacyArgs)
 	legacy, err := readConvoyIssues(townBeads, legacyArgs...)
 	if err != nil {
 		return nil, err
@@ -2614,7 +2616,7 @@ func getWorkersForIssues(issueIDs []string) map[string]*workerInfo {
 		go func(workDir string) {
 			defer wg.Done()
 
-			out, err := BdCmd("list", "--label=gt:agent", "--status=open", "--json", "--limit=0").
+			out, err := BdCmd("list", "--label=gt:agent", "--status=open", "--json", "--limit=0", "--flat").
 				Dir(workDir).
 				StripBeadsDir().
 				Stderr(io.Discard).
