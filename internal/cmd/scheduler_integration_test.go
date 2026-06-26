@@ -26,6 +26,7 @@ import (
 
 	"github.com/steveyegge/gastown/internal/beads"
 	"github.com/steveyegge/gastown/internal/config"
+	"github.com/steveyegge/gastown/internal/formula"
 	"github.com/steveyegge/gastown/internal/scheduler/capacity"
 )
 
@@ -152,6 +153,22 @@ func setTestBeadStatus(t *testing.T, dir, beadID, status string) {
 	}
 }
 
+func installSchedulerTestFormula(t *testing.T, rigPath string) {
+	t.Helper()
+	content, err := formula.GetEmbeddedFormulaContent("mol-polecat-work")
+	if err != nil {
+		t.Fatalf("load embedded mol-polecat-work formula: %v", err)
+	}
+	formulasDir := filepath.Join(rigPath, ".beads", "formulas")
+	if err := os.MkdirAll(formulasDir, 0755); err != nil {
+		t.Fatalf("mkdir formulas dir: %v", err)
+	}
+	path := filepath.Join(formulasDir, "mol-polecat-work.formula.toml")
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 // setupSchedulerIntegrationTown creates a minimal town filesystem for scheduler tests.
 // Uses the shared Dolt test server (managed by requireDoltServer)
 // for beads databases. No gt install, no Claude credentials, no agent sessions.
@@ -241,6 +258,7 @@ func setupSchedulerIntegrationTown(t *testing.T) (hqPath, rigPath, gtBinary stri
 		t.Fatalf("mkdir rigPath: %v", err)
 	}
 	initBeadsDBForServer(t, rigPath, rigPrefix, tmpDir)
+	installSchedulerTestFormula(t, rigPath)
 
 	// Redirect: testrig/.beads/ → mayor/rig/.beads
 	// beadsSearchDirs scans townRoot/<dir>/.beads — the redirect lets bd commands
@@ -725,6 +743,7 @@ func setupMultiRigSchedulerTown(t *testing.T) (hqPath, rig1Path, rig2Path, gtBin
 	if err := beads.WriteRoutes(filepath.Join(rig1Path, ".beads"), routes); err != nil {
 		t.Fatalf("write rig1 routes: %v", err)
 	}
+	installSchedulerTestFormula(t, rig1Path)
 	rig1Redirect := filepath.Join(hqPath, "rig1", ".beads")
 	if err := os.MkdirAll(rig1Redirect, 0755); err != nil {
 		t.Fatalf("mkdir rig1 redirect: %v", err)
@@ -741,6 +760,7 @@ func setupMultiRigSchedulerTown(t *testing.T) (hqPath, rig1Path, rig2Path, gtBin
 	if err := beads.WriteRoutes(filepath.Join(rig2Path, ".beads"), routes); err != nil {
 		t.Fatalf("write rig2 routes: %v", err)
 	}
+	installSchedulerTestFormula(t, rig2Path)
 	rig2Redirect := filepath.Join(hqPath, "rig2", ".beads")
 	if err := os.MkdirAll(rig2Redirect, 0755); err != nil {
 		t.Fatalf("mkdir rig2 redirect: %v", err)
